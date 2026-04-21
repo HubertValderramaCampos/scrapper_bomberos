@@ -44,7 +44,7 @@ def login(driver, intentos=5):
             driver.find_element(By.NAME, "txtUsuario").clear()
             driver.find_element(By.NAME, "txtUsuario").send_keys(os.getenv("USUARIO_INTRANET"))
             driver.find_element(By.NAME, "txtContrasenia").clear()
-            driver.find_element(By.NAME, "txtContrasenia").send_keys(os.getenv("CONTRASEÑA_INTRANET"))
+            driver.find_element(By.NAME, "txtContrasenia").send_keys(os.getenv("CONTRASENA_INTRANET"))
             driver.find_element(By.CSS_SELECTOR, "input.Boton[value='ACEPTAR']").click()
             time.sleep(4)
             _aceptar_alerts(driver)
