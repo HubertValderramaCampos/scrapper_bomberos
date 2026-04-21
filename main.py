@@ -1,10 +1,25 @@
 import time
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, date, timedelta
 
 from browser import iniciar_driver, login, nueva_session
 from scrapers.estado_cia import scrape_estado_cia
 from scrapers.partes_cia import scrape_partes_cia
 from scrapers.asistencia_mensual import scrape_asistencia_mensual
+
+class _Health(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+    def log_message(self, *_):
+        pass
+
+threading.Thread(
+    target=lambda: HTTPServer(("0.0.0.0", 8080), _Health).serve_forever(),
+    daemon=True,
+).start()
 
 INTERVALO_ESTADO = 2 * 60
 INTERVALO_PARTES = 15 * 60

@@ -29,8 +29,8 @@ def _buscar_bombero(cur, nombre_raw):
     apellidos = " ".join(palabras[-2:]) if len(palabras) >= 2 else palabras[-1]
     cur.execute("""
         SELECT id FROM bombero
-        WHERE REGEXP_REPLACE(apellidos, '\s+', ' ', 'g') ILIKE %s
-        AND   REGEXP_REPLACE(nombres,   '\s+', ' ', 'g') ILIKE %s
+        WHERE REGEXP_REPLACE(apellidos, '\\s+', ' ', 'g') ILIKE %s
+        AND   REGEXP_REPLACE(nombres,   '\\s+', ' ', 'g') ILIKE %s
         LIMIT 1
     """, (f"%{apellidos}%", f"%{nombres}%"))
     row = cur.fetchone()
@@ -48,8 +48,8 @@ def _buscar_o_crear_piloto(cur, nombre_raw):
         apellidos, nombres = nombre, ""
     cur.execute("""
         SELECT id FROM piloto_rentado
-        WHERE REGEXP_REPLACE(apellidos, '\s+', ' ', 'g') ILIKE %s
-        AND   REGEXP_REPLACE(nombres,   '\s+', ' ', 'g') ILIKE %s
+        WHERE REGEXP_REPLACE(apellidos, '\\s+', ' ', 'g') ILIKE %s
+        AND   REGEXP_REPLACE(nombres,   '\\s+', ' ', 'g') ILIKE %s
         LIMIT 1
     """, (f"%{apellidos}%", f"%{nombres}%"))
     row = cur.fetchone()
