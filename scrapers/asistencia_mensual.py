@@ -30,6 +30,19 @@ def scrape_asistencia_mensual(driver, mes: int, anio: int):
     try:
         driver.get(f"{URL}?{urlencode(params)}")
         time.sleep(3)
+
+        # El portal lanza un alert si el mes aún no está cerrado
+        try:
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            alert = WebDriverWait(driver, 2).until(EC.alert_is_present())
+            msg = alert.text
+            alert.accept()
+            print(f"[{datetime.now():%H:%M:%S}] Asistencia {mes:02d}/{anio} — portal: {msg}")
+            return
+        except Exception:
+            pass
+
         if "localhost" in driver.current_url or "ini.asp" in driver.current_url:
             from browser import login as _login
             _login(driver)

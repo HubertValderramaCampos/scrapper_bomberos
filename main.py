@@ -52,11 +52,16 @@ while True:
             scrape_partes_cia(nueva_session(driver), driver=driver)
             ultimo_partes = time.time()
 
-        # Asistencia mensual: solo entre día 1 y 5, scrapeando el mes anterior
-        if hoy.day <= 5 and ahora - ultimo_asistencia >= INTERVALO_ASISTENCIA:
-            mes_anterior = hoy.replace(day=1) - timedelta(days=1)
-            print(f"[{datetime.now():%H:%M:%S}] Actualizando asistencia {mes_anterior.month:02d}/{mes_anterior.year}...")
-            scrape_asistencia_mensual(driver, mes_anterior.month, mes_anterior.year)
+        # Asistencia mensual: cada 6h siempre
+        if ahora - ultimo_asistencia >= INTERVALO_ASISTENCIA:
+            # Días 1-5: también scrapeamos el mes anterior (ya cerrado)
+            if hoy.day <= 5:
+                mes_anterior = hoy.replace(day=1) - timedelta(days=1)
+                print(f"[{datetime.now():%H:%M:%S}] Actualizando asistencia {mes_anterior.month:02d}/{mes_anterior.year}...")
+                scrape_asistencia_mensual(driver, mes_anterior.month, mes_anterior.year)
+            # Siempre intentamos el mes actual (el portal lo rechaza si no está cerrado, falla silenciosamente)
+            print(f"[{datetime.now():%H:%M:%S}] Intentando asistencia {hoy.month:02d}/{hoy.year}...")
+            scrape_asistencia_mensual(driver, hoy.month, hoy.year)
             ultimo_asistencia = time.time()
 
     except Exception as e:
