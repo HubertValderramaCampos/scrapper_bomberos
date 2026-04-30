@@ -40,7 +40,7 @@ def scrape_24horas():
                 INSERT INTO emergencia (numero_parte, tipo, estado, fecha_despacho)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (numero_parte) DO UPDATE SET
-                    estado         = EXCLUDED.estado,
+                    estado         = CASE WHEN emergencia.estado = 'CANCELADA' THEN 'CANCELADA' ELSE EXCLUDED.estado END,
                     tipo           = EXCLUDED.tipo,
                     fecha_despacho = COALESCE(emergencia.fecha_despacho, EXCLUDED.fecha_despacho)
                 RETURNING id, (xmax = 0) AS es_nueva

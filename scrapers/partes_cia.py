@@ -223,7 +223,7 @@ def scrape_partes_cia(session, driver=None):
                          km_salida, km_ingreso, al_mando_id, tipo_emergencia_id, distrito_id)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (numero_parte) DO UPDATE SET
-                        estado         = EXCLUDED.estado,
+                        estado         = CASE WHEN emergencia.estado = 'CANCELADA' THEN 'CANCELADA' ELSE EXCLUDED.estado END,
                         fecha_salida   = COALESCE(EXCLUDED.fecha_salida,   emergencia.fecha_salida),
                         fecha_llegada  = COALESCE(EXCLUDED.fecha_llegada,  emergencia.fecha_llegada),
                         fecha_retorno  = COALESCE(EXCLUDED.fecha_retorno,  emergencia.fecha_retorno),
@@ -361,7 +361,7 @@ def scrape_partes_cia_rango(session, driver, fecha_inicio: date, fecha_fin: date
                          km_salida, km_ingreso, al_mando_id, tipo_emergencia_id, distrito_id)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (numero_parte) DO UPDATE SET
-                        estado             = EXCLUDED.estado,
+                        estado             = CASE WHEN emergencia.estado = 'CANCELADA' THEN 'CANCELADA' ELSE EXCLUDED.estado END,
                         direccion          = COALESCE(EXCLUDED.direccion,        emergencia.direccion),
                         fecha_salida       = COALESCE(EXCLUDED.fecha_salida,     emergencia.fecha_salida),
                         fecha_llegada      = COALESCE(EXCLUDED.fecha_llegada,    emergencia.fecha_llegada),
