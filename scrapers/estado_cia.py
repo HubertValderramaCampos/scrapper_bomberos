@@ -3,6 +3,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 
 from db import conn
+from scrapers.estado_sgo import obtener_disponibilidad_sgo
 
 URL       = "https://www.bomberosperu.gob.pe/extranet/DEPA/CEEM/EstadoCia/CEEMCiaLis.asp"
 CODIGO_CIA = "31501980006"
@@ -141,7 +142,13 @@ def scrape_estado_cia(session, driver=None):
               observaciones, informante, fecha_hora))
         estado_id = cur.fetchone()[0]
 
+        # Disponibilidad real por unidad (vista SGO, cruza personal/pilotos/
+        # paramédicos disponibles) — la vista EstadoCia de abajo no lo hace,
+        # así que una unidad puede seguir "EN BASE" sin nadie para tripularla.
+        disponibilidad_sgo = obtener_disponibilidad_sgo(driver) if driver else {}
+
         # Tabla 2: vehículos propios
+        sin_personal = []
         for fila in tablas[1].find_all("tr")[2:]:
             inputs = fila.find_all("input")
             if len(inputs) < 7:
@@ -152,6 +159,13 @@ def scrape_estado_cia(session, driver=None):
             tipo_v   = inputs[6].get("value", "").strip() or "DESCONOCIDO"
             if not cod_v:
                 continue
+
+            # Solo completamos cuando EstadoCia no dio ningún motivo propio —
+            # si ya dice EN TALLER o trae un motivo (PARAMEDICO, etc.), esa es
+            # la razón exacta y no la pisamos con la genérica de SGO.
+            if estado_v == "EN BASE" and not motivo_v and disponibilidad_sgo.get(cod_v) == "NO_DISPONIBLE":
+                motivo_v = "SIN PERSONAL"
+                sin_personal.append(cod_v)
             try:
                 cur.execute("""
                     INSERT INTO vehiculo (codigo, tipo, estado, motivo)
@@ -221,7 +235,8 @@ def scrape_estado_cia(session, driver=None):
                 actualizar_estado_bombero(cur, bid, "franco")
 
         conn.commit()
-        print(f"[{datetime.now():%H:%M:%S}] Estado CIA — {estado_general} | personal: {personal} | vehículos: {len(tablas[1].find_all('tr'))-2}")
+        extra = f" | sin personal: {', '.join(sin_personal)}" if sin_personal else ""
+        print(f"[{datetime.now():%H:%M:%S}] Estado CIA — {estado_general} | personal: {personal} | vehículos: {len(tablas[1].find_all('tr'))-2}{extra}")
 
     except Exception as e:
         conn.rollback()
