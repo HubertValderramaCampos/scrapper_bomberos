@@ -127,6 +127,11 @@ def _buscar_o_crear_distrito(cur, direccion):
 def _sesion_activa(driver):
     return "extranet" in driver.current_url and "ini.asp" not in driver.current_url
 
+def _determinar_estado(tipo_parte, fecha_ingreso):
+    if tipo_parte and "CANCELAD" in tipo_parte.upper():
+        return "CANCELADA"
+    return "CERRADO" if fecha_ingreso else "ATENDIENDO"
+
 def scrape_partes_cia(session, driver=None):
     cur = conn.cursor()
     nuevos = actualizados = 0
@@ -223,6 +228,7 @@ def scrape_partes_cia(session, driver=None):
                          km_salida, km_ingreso, al_mando_id, tipo_emergencia_id, distrito_id)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (numero_parte) DO UPDATE SET
+                        tipo           = EXCLUDED.tipo,
                         estado         = CASE WHEN emergencia.estado = 'CANCELADA' THEN 'CANCELADA' ELSE EXCLUDED.estado END,
                         fecha_salida   = COALESCE(EXCLUDED.fecha_salida,   emergencia.fecha_salida),
                         fecha_llegada  = COALESCE(EXCLUDED.fecha_llegada,  emergencia.fecha_llegada),
@@ -236,7 +242,7 @@ def scrape_partes_cia(session, driver=None):
                         tipo_emergencia_id = COALESCE(EXCLUDED.tipo_emergencia_id, emergencia.tipo_emergencia_id),
                         distrito_id    = COALESCE(EXCLUDED.distrito_id,    emergencia.distrito_id)
                     RETURNING id, (xmax = 0) AS es_nueva
-                """, (numero_parte, tipo_parte, "CERRADO" if fecha_ingreso else "ATENDIENDO",
+                """, (numero_parte, tipo_parte, _determinar_estado(tipo_parte, fecha_ingreso),
                       piloto_nombre, num_efectivos, direccion, observacion,
                       fecha_despacho, fecha_salida, fecha_llegada, fecha_retorno, fecha_ingreso,
                       km_salida, km_ingreso, al_mando_id, tipo_emerg_id, distrito_id))
@@ -351,7 +357,7 @@ def scrape_partes_cia_rango(session, driver, fecha_inicio: date, fecha_fin: date
                 cod_vehi_texto = tds[4].get_text(strip=True)
                 vehiculo_id    = _buscar_vehiculo(cur, cod_vehi_texto)
 
-                estado = "CERRADO" if fecha_ingreso else "ATENDIENDO"
+                estado = _determinar_estado(tipo_parte, fecha_ingreso)
 
                 cur.execute("""
                     INSERT INTO emergencia
@@ -361,6 +367,7 @@ def scrape_partes_cia_rango(session, driver, fecha_inicio: date, fecha_fin: date
                          km_salida, km_ingreso, al_mando_id, tipo_emergencia_id, distrito_id)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (numero_parte) DO UPDATE SET
+                        tipo               = EXCLUDED.tipo,
                         estado             = CASE WHEN emergencia.estado = 'CANCELADA' THEN 'CANCELADA' ELSE EXCLUDED.estado END,
                         direccion          = COALESCE(EXCLUDED.direccion,        emergencia.direccion),
                         fecha_salida       = COALESCE(EXCLUDED.fecha_salida,     emergencia.fecha_salida),
