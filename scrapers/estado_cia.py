@@ -87,9 +87,13 @@ def actualizar_estado_bombero(cur, bombero_id, nuevo_estado):
 def scrape_estado_cia(session, driver=None):
     cur = conn.cursor()
     try:
-        r = session.get(URL, params={"CodigoCia": CODIGO_CIA}, timeout=30)
-        # Detectar redirect a localhost (sesión expirada)
-        if "localhost" in r.url or len(r.content) < 500:
+        # Sin seguir redirects: con la sesión expirada el portal redirige a
+        # http://localhost/extranet/default.asp y requests fallaría con
+        # "Connection refused" antes de poder detectarlo.
+        r = session.get(URL, params={"CodigoCia": CODIGO_CIA}, timeout=30, allow_redirects=False)
+        destino = r.headers.get("Location", "") if r.is_redirect else ""
+        # Detectar redirect a localhost / login (sesión expirada)
+        if "localhost" in destino or "ini.asp" in destino or "localhost" in r.url or len(r.content) < 500:
             if driver:
                 from browser import login as _login, nueva_session as _nueva_session
                 _login(driver)
