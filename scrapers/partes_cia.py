@@ -135,8 +135,8 @@ def _determinar_estado(tipo_parte, fecha_ingreso):
 
 DIAS_REVISION_ABIERTAS = 7
 
-def _dias_a_revisar(cur, hoy):
-    """Hoy + ayer + los días de partes que siguen en ATENDIENDO (última semana).
+def dias_pendientes(cur, hoy):
+    """Ayer + los días (sin contar hoy) con partes aún en ATENDIENDO, última semana.
 
     El portal se consulta por día. Si solo se pide "hoy", un parte cuyo
     ingreso a base se registra después de medianoche (o mientras el scraper
@@ -148,8 +148,8 @@ def _dias_a_revisar(cur, hoy):
         WHERE estado = 'ATENDIENDO'
           AND COALESCE(fecha_despacho, fecha_salida) >= %s
     """, (hoy - timedelta(days=DIAS_REVISION_ABIERTAS),))
-    dias = {hoy, hoy - timedelta(days=1)} | {r[0] for r in cur.fetchall() if r[0]}
-    return sorted(d for d in dias if d <= hoy)
+    dias = {hoy - timedelta(days=1)} | {r[0] for r in cur.fetchall() if r[0]}
+    return sorted(d for d in dias if d < hoy)
 
 def scrape_partes_cia(session, driver=None, dias=None):
     cur = conn.cursor()
@@ -157,7 +157,7 @@ def scrape_partes_cia(session, driver=None, dias=None):
 
     hoy = date.today()
     if dias is None:
-        dias = _dias_a_revisar(cur, hoy)
+        dias = [hoy]
     params_base = {
         "NivelArbol": "../../../",
         "txtOrden": "numParte",

@@ -15,6 +15,12 @@ def iniciar_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    # Menos consumo: el scraper solo lee HTML, no necesita imágenes ni extras.
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--mute-audio")
+    options.add_argument("--renderer-process-limit=2")
     if os.getenv("HEADLESS", "1") != "0":
         options.add_argument("--headless=new")
     else:

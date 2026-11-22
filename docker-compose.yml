@@ -4,3 +4,6 @@ services:
     env_file: .env
     restart: always
     shm_size: "256m"
+    # Tope para que nunca sature la PC (uso normal: ~0.1% CPU, ~300 MB).
+    cpus: "1.0"
+    mem_limit: "1g"

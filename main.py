@@ -5,7 +5,8 @@ from datetime import datetime, date, timedelta
 
 from browser import iniciar_driver, login, nueva_session
 from scrapers.estado_cia import scrape_estado_cia
-from scrapers.partes_cia import scrape_partes_cia
+from scrapers.partes_cia import scrape_partes_cia, dias_pendientes
+from db import conn
 from scrapers.asistencia_mensual import scrape_asistencia_mensual
 
 class _Health(BaseHTTPRequestHandler):
@@ -21,9 +22,12 @@ threading.Thread(
     daemon=True,
 ).start()
 
-INTERVALO_ESTADO = 2 * 60
-INTERVALO_PARTES = 15 * 60
-INTERVALO_ASISTENCIA = 6 * 60 * 60  # cada 6 horas (solo actúa si día <= 5)
+# Intervalos pensados para no cargar la PC: cada lectura abre páginas en Chromium.
+INTERVALO_ESTADO = 5 * 60              # estado de la compañía
+INTERVALO_PARTES = 15 * 60             # partes de hoy
+INTERVALO_PARTES_PENDIENTES = 3 * 60 * 60  # días anteriores con partes aún en ATENDIENDO
+INTERVALO_ASISTENCIA = 12 * 60 * 60    # solo los días 1-5 (mes anterior ya cerrado)
+PAUSA_LOOP = 60
 
 def iniciar_sesion():
     d = iniciar_driver()
@@ -34,9 +38,10 @@ driver = iniciar_sesion()
 
 ultimo_estado = 0
 ultimo_partes = 0
+ultimo_pendientes = 0
 ultimo_asistencia = 0
 
-print(f"[{datetime.now():%H:%M:%S}] Loop iniciado — estado cada 2min | partes cada 15min")
+print(f"[{datetime.now():%H:%M:%S}] Loop iniciado — estado cada 5min | partes hoy cada 15min | pendientes cada 3h")
 print(f"[{datetime.now():%H:%M:%S}] Para actualizar padrón de bomberos: python actualizar_bomberos.py")
 
 while True:
@@ -49,19 +54,25 @@ while True:
 
         if ahora - ultimo_partes >= INTERVALO_PARTES:
             print(f"[{datetime.now():%H:%M:%S}] Actualizando partes CIA...")
-            scrape_partes_cia(nueva_session(driver), driver=driver)
+            scrape_partes_cia(nueva_session(driver), driver=driver, dias=[hoy])
             ultimo_partes = time.time()
 
-        # Asistencia mensual: cada 6h siempre
-        if ahora - ultimo_asistencia >= INTERVALO_ASISTENCIA:
-            # Días 1-5: también scrapeamos el mes anterior (ya cerrado)
-            if hoy.day <= 5:
-                mes_anterior = hoy.replace(day=1) - timedelta(days=1)
-                print(f"[{datetime.now():%H:%M:%S}] Actualizando asistencia {mes_anterior.month:02d}/{mes_anterior.year}...")
-                scrape_asistencia_mensual(driver, mes_anterior.month, mes_anterior.year)
-            # Siempre intentamos el mes actual (el portal lo rechaza si no está cerrado, falla silenciosamente)
-            print(f"[{datetime.now():%H:%M:%S}] Intentando asistencia {hoy.month:02d}/{hoy.year}...")
-            scrape_asistencia_mensual(driver, hoy.month, hoy.year)
+        # Ayer + días con partes abiertos: rara vez cambian, basta cada 3h.
+        if ahora - ultimo_pendientes >= INTERVALO_PARTES_PENDIENTES:
+            cur = conn.cursor()
+            dias = dias_pendientes(cur, hoy)
+            cur.close()
+            if dias:
+                print(f"[{datetime.now():%H:%M:%S}] Revisando partes pendientes: {', '.join(f'{d:%d/%m}' for d in dias)}")
+                scrape_partes_cia(nueva_session(driver), driver=driver, dias=dias)
+            ultimo_pendientes = time.time()
+
+        # Asistencia: el mes en curso siempre responde "Mes no cerrado", así que
+        # solo se pide el mes anterior durante los días 1-5.
+        if hoy.day <= 5 and ahora - ultimo_asistencia >= INTERVALO_ASISTENCIA:
+            mes_anterior = hoy.replace(day=1) - timedelta(days=1)
+            print(f"[{datetime.now():%H:%M:%S}] Actualizando asistencia {mes_anterior.month:02d}/{mes_anterior.year}...")
+            scrape_asistencia_mensual(driver, mes_anterior.month, mes_anterior.year)
             ultimo_asistencia = time.time()
 
     except Exception as e:
@@ -74,4 +85,4 @@ while True:
         time.sleep(10)
         driver = iniciar_sesion()
 
-    time.sleep(30)
+    time.sleep(PAUSA_LOOP)
