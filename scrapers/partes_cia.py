@@ -135,6 +135,36 @@ def _determinar_estado(tipo_parte, fecha_ingreso):
 
 DIAS_REVISION_ABIERTAS = 7
 
+def _sesion_expirada(driver, error=None):
+    # Con la sesión vencida el portal redirige a http://localhost/..., que
+    # Chrome no puede abrir: driver.get lanza ERR_CONNECTION_REFUSED.
+    if error is not None and "ERR_CONNECTION_REFUSED" in str(error):
+        return True
+    url = driver.current_url
+    return "localhost" in url or "ini.asp" in url or url.startswith("chrome-error://")
+
+def _cargar_pagina(driver, url, etiqueta):
+    """Abre url; si la sesión venció, vuelve a loguear de inmediato (sin esperas)."""
+    from browser import login
+    relogueado = False
+    for intento in range(3):
+        error = None
+        try:
+            driver.get(url)
+            time.sleep(3)
+        except Exception as e:
+            error = e
+        if _sesion_expirada(driver, error):
+            if relogueado:
+                break
+            login(driver)
+            relogueado = True
+            continue
+        if error is None:
+            return
+        print(f"  Reintentando {etiqueta} ({intento+1}/3)...")
+        time.sleep(10)
+
 def dias_pendientes(cur, hoy):
     """Ayer + los días (sin contar hoy) con partes aún en ATENDIENDO, última semana.
 
@@ -192,19 +222,7 @@ def scrape_partes_cia(session, driver=None, dias=None):
                 "cboVehi": cod_vehi,
             }
             if driver:
-                for intento in range(3):
-                    try:
-                        driver.get(f"{URL}?{urlencode(params)}")
-                        time.sleep(3)
-                        break
-                    except Exception:
-                        print(f"  Reintentando {etiqueta} ({intento+1}/3)...")
-                        time.sleep(10)
-                if "localhost" in driver.current_url or "ini.asp" in driver.current_url:
-                    from browser import login
-                    login(driver)
-                    driver.get(f"{URL}?{urlencode(params)}")
-                    time.sleep(3)
+                _cargar_pagina(driver, f"{URL}?{urlencode(params)}", etiqueta)
                 html = driver.page_source
                 soup = BeautifulSoup(html, "html.parser")
             else:
