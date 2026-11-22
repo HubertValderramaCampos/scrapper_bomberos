@@ -9,9 +9,12 @@ URL       = "https://www.bomberosperu.gob.pe/extranet/DEPA/CEEM/EstadoCia/CEEMCi
 CODIGO_CIA = "31501980006"
 
 def parse_fecha(texto):
-    for fmt in ("%d/%m/%Y %I:%M:%S %p.", "%d/%m/%Y %I:%M:%S %p", "%d/%m/%Y %H:%M:%S"):
+    # El portal escribe "22/11/2026 08:09:10 a.m."; %p solo entiende AM/PM.
+    texto = re.sub(r"\s+", " ", texto.strip())
+    texto = re.sub(r"\b([ap])\.?\s?m\.?$", lambda m: m.group(1).upper() + "M", texto, flags=re.I)
+    for fmt in ("%d/%m/%Y %I:%M:%S %p", "%d/%m/%Y %I:%M %p", "%d/%m/%Y %H:%M:%S"):
         try:
-            return datetime.strptime(texto.strip(), fmt)
+            return datetime.strptime(texto, fmt)
         except ValueError:
             continue
     return None

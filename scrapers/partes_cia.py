@@ -1,5 +1,6 @@
 import re
 import time
+from itertools import product
 from datetime import datetime, date, timedelta
 from urllib.parse import urlencode
 from bs4 import BeautifulSoup
@@ -132,11 +133,31 @@ def _determinar_estado(tipo_parte, fecha_ingreso):
         return "CANCELADA"
     return "CERRADO" if fecha_ingreso else "ATENDIENDO"
 
-def scrape_partes_cia(session, driver=None):
+DIAS_REVISION_ABIERTAS = 7
+
+def _dias_a_revisar(cur, hoy):
+    """Hoy + ayer + los días de partes que siguen en ATENDIENDO (última semana).
+
+    El portal se consulta por día. Si solo se pide "hoy", un parte cuyo
+    ingreso a base se registra después de medianoche (o mientras el scraper
+    estaba detenido) nunca vuelve a leerse y queda en ATENDIENDO para siempre.
+    """
+    cur.execute("""
+        SELECT DISTINCT COALESCE(fecha_despacho, fecha_salida)::date
+        FROM emergencia
+        WHERE estado = 'ATENDIENDO'
+          AND COALESCE(fecha_despacho, fecha_salida) >= %s
+    """, (hoy - timedelta(days=DIAS_REVISION_ABIERTAS),))
+    dias = {hoy, hoy - timedelta(days=1)} | {r[0] for r in cur.fetchall() if r[0]}
+    return sorted(d for d in dias if d <= hoy)
+
+def scrape_partes_cia(session, driver=None, dias=None):
     cur = conn.cursor()
     nuevos = actualizados = 0
 
     hoy = date.today()
+    if dias is None:
+        dias = _dias_a_revisar(cur, hoy)
     params_base = {
         "NivelArbol": "../../../",
         "txtOrden": "numParte",
@@ -150,12 +171,6 @@ def scrape_partes_cia(session, driver=None):
         "txtValoresCadenaDependencia": "",
         "opc": "1",
         "cboTipos": "T",
-        "cboMesFechaInicio":  f"{hoy.month:02d}",
-        "cboAnioFechaInicio": str(hoy.year),
-        "cboMesFechaFin":     f"{hoy.month:02d}",
-        "cboAnioFechaFin":    str(hoy.year),
-        "cboDiaFechaInicio":  str(hoy.day),
-        "cboDiaFechaFin":     str(hoy.day),
         "cboHoraFechaInicio": "0",
         "cboHoraFechaFin":    "23",
         "cboMinutoFechaInicio": "0",
@@ -163,9 +178,19 @@ def scrape_partes_cia(session, driver=None):
         "txtTitulo":          "ESTADO DE COMPANIAS",
     }
 
-    for cod_vehi, cod_texto in VEHICULOS_CIA.items():
+    for dia, (cod_vehi, cod_texto) in product(dias, VEHICULOS_CIA.items()):
+        etiqueta = cod_texto if dia == hoy else f"{cod_texto} [{dia:%d/%m}]"
         try:
-            params = {**params_base, "cboVehi": cod_vehi}
+            params = {
+                **params_base,
+                "cboMesFechaInicio":  f"{dia.month:02d}",
+                "cboAnioFechaInicio": str(dia.year),
+                "cboMesFechaFin":     f"{dia.month:02d}",
+                "cboAnioFechaFin":    str(dia.year),
+                "cboDiaFechaInicio":  str(dia.day),
+                "cboDiaFechaFin":     str(dia.day),
+                "cboVehi": cod_vehi,
+            }
             if driver:
                 for intento in range(3):
                     try:
@@ -173,7 +198,7 @@ def scrape_partes_cia(session, driver=None):
                         time.sleep(3)
                         break
                     except Exception:
-                        print(f"  Reintentando {cod_texto} ({intento+1}/3)...")
+                        print(f"  Reintentando {etiqueta} ({intento+1}/3)...")
                         time.sleep(10)
                 if "localhost" in driver.current_url or "ini.asp" in driver.current_url:
                     from browser import login
@@ -267,11 +292,11 @@ def scrape_partes_cia(session, driver=None):
                         conn.rollback()
 
             conn.commit()
-            print(f"  {cod_texto}: {len(filas)} partes procesados")
+            print(f"  {etiqueta}: {len(filas)} partes procesados")
 
         except Exception as e:
             conn.rollback()
-            print(f"  ERROR partes {cod_texto}: {e}")
+            print(f"  ERROR partes {etiqueta}: {e}")
 
     cur.close()
     print(f"[{datetime.now():%H:%M:%S}] Partes CIA — {nuevos} nuevos | {actualizados} actualizados")
