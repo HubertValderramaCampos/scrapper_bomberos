@@ -8,9 +8,19 @@ from scrapers.estado_cia import scrape_estado_cia
 from scrapers.partes_cia import scrape_partes_cia, dias_pendientes
 from db import conn
 from scrapers.asistencia_mensual import scrape_asistencia_mensual
+from scrapers.unidades_sgo import scrape_unidades_sgo, estado_actual as estado_unidades
+import json
 
 class _Health(BaseHTTPRequestHandler):
     def do_GET(self):
+        # /unidades: estado en vivo de las unidades (lo consume Alerta 116, sin abrir otra sesión)
+        if self.path.startswith("/unidades"):
+            cuerpo = json.dumps(estado_unidades(), ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(cuerpo)
+            return
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"ok")
@@ -27,6 +37,7 @@ INTERVALO_ESTADO = 5 * 60              # estado de la compañía
 INTERVALO_PARTES = 15 * 60             # partes de hoy
 INTERVALO_PARTES_PENDIENTES = 3 * 60 * 60  # días anteriores con partes aún en ATENDIENDO
 INTERVALO_ASISTENCIA = 12 * 60 * 60    # solo los días 1-5 (mes anterior ya cerrado)
+INTERVALO_UNIDADES = 2 * 60            # unidades en emergencia (5 páginas livianas, sin Chromium)
 PAUSA_LOOP = 60
 
 def iniciar_sesion():
@@ -40,6 +51,12 @@ ultimo_estado = 0
 ultimo_partes = 0
 ultimo_pendientes = 0
 ultimo_asistencia = 0
+ultimo_unidades = 0
+
+def _relogin():
+    """Vuelve a iniciar sesión en el mismo navegador y devuelve una sesión HTTP nueva."""
+    login(driver)
+    return nueva_session(driver)
 
 print(f"[{datetime.now():%H:%M:%S}] Loop iniciado — estado cada 5min | partes hoy cada 15min | pendientes cada 3h")
 print(f"[{datetime.now():%H:%M:%S}] Para actualizar padrón de bomberos: python actualizar_bomberos.py")
@@ -48,6 +65,10 @@ while True:
     ahora = time.time()
     hoy = date.today()
     try:
+        if ahora - ultimo_unidades >= INTERVALO_UNIDADES:
+            scrape_unidades_sgo(nueva_session(driver), relogin=_relogin)
+            ultimo_unidades = time.time()
+
         if ahora - ultimo_estado >= INTERVALO_ESTADO:
             scrape_estado_cia(nueva_session(driver), driver=driver)
             ultimo_estado = time.time()

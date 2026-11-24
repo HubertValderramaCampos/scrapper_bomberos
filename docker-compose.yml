@@ -3,6 +3,9 @@ services:
     build: .
     env_file: .env
     restart: always
+    # HTTP interno (/unidades) solo para esta PC: lo lee Alerta 116 vía host.docker.internal
+    ports:
+      - "127.0.0.1:8085:8080"
     shm_size: "256m"
     # Tope para que nunca sature la PC (uso normal: ~0.1% CPU, ~300 MB).
     cpus: "1.0"
