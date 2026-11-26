@@ -7,7 +7,7 @@ from browser import iniciar_driver, login, nueva_session
 from scrapers.estado_cia import scrape_estado_cia
 from scrapers.partes_cia import scrape_partes_cia, dias_pendientes
 from db import conn
-from scrapers.asistencia_mensual import scrape_asistencia_mensual
+from scrapers.asistencia_mensual import scrape_asistencia_mensual, mes_cargado
 from scrapers.unidades_sgo import scrape_unidades_sgo, estado_actual as estado_unidades
 import json
 
@@ -36,7 +36,7 @@ threading.Thread(
 INTERVALO_ESTADO = 5 * 60              # estado de la compañía
 INTERVALO_PARTES = 15 * 60             # partes de hoy
 INTERVALO_PARTES_PENDIENTES = 3 * 60 * 60  # días anteriores con partes aún en ATENDIENDO
-INTERVALO_ASISTENCIA = 12 * 60 * 60    # solo los días 1-5 (mes anterior ya cerrado)
+INTERVALO_ASISTENCIA = 12 * 60 * 60    # mes anterior: días 1-5 y luego hasta que el portal lo publique
 INTERVALO_UNIDADES = 2 * 60            # unidades en emergencia (5 páginas livianas, sin Chromium)
 PAUSA_LOOP = 60
 
@@ -89,11 +89,15 @@ while True:
             ultimo_pendientes = time.time()
 
         # Asistencia: el mes en curso siempre responde "Mes no cerrado", así que
-        # solo se pide el mes anterior durante los días 1-5.
-        if hoy.day <= 5 and ahora - ultimo_asistencia >= INTERVALO_ASISTENCIA:
+        # solo se pide el mes anterior. El portal lo publica recién al cerrarlo,
+        # y eso puede pasar después del día 5 (octubre 2026 nunca se cargó por
+        # eso): se baja los días 1-5 aunque ya exista (por si el cierre corrigió
+        # cifras) y, pasado el 5, mientras todavía no tenga datos.
+        if ahora - ultimo_asistencia >= INTERVALO_ASISTENCIA:
             mes_anterior = hoy.replace(day=1) - timedelta(days=1)
-            print(f"[{datetime.now():%H:%M:%S}] Actualizando asistencia {mes_anterior.month:02d}/{mes_anterior.year}...")
-            scrape_asistencia_mensual(driver, mes_anterior.month, mes_anterior.year)
+            if hoy.day <= 5 or not mes_cargado(mes_anterior.month, mes_anterior.year):
+                print(f"[{datetime.now():%H:%M:%S}] Actualizando asistencia {mes_anterior.month:02d}/{mes_anterior.year}...")
+                scrape_asistencia_mensual(driver, mes_anterior.month, mes_anterior.year)
             ultimo_asistencia = time.time()
 
     except Exception as e:

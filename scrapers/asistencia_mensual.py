@@ -7,6 +7,22 @@ from db import conn
 
 URL = "http://www.bomberosperu.gob.pe/extranet/depa/ceem/asistencia_bomberos/CEEMAsisLis.asp"
 
+def mes_cargado(mes: int, anio: int) -> bool:
+    """True si asistencia_mensual ya tiene filas para ese mes."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT EXISTS(SELECT 1 FROM asistencia_mensual WHERE mes = %s AND anio = %s)",
+            (mes, anio),
+        )
+        return bool(cur.fetchone()[0])
+    except Exception as e:
+        conn.rollback()
+        print(f"[{datetime.now():%H:%M:%S}] ERROR verificando asistencia {mes:02d}/{anio}: {e}")
+        return False  # ante la duda, intentar bajarlo
+    finally:
+        cur.close()
+
 def scrape_asistencia_mensual(driver, mes: int, anio: int):
     cur = conn.cursor()
     nuevos = actualizados = 0
